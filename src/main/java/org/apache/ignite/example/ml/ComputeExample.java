@@ -214,15 +214,16 @@ public class ComputeExample {
     private void executeBatchMLPrediction() throws Exception {
         System.out.println("\n=== Batch ML Prediction ===");
 
-        List<String> batchInputs = Arrays.asList(
-                "This movie is very good",
-                "This book is not good",
-                "This food is very good",
-                "This game is not good",
-                "This song is very good",
-                "This show is very good",
-                "This app is very good"
-        );
+        List<String> batchInputs = Arrays.aslist();
+//                Arrays.asList(
+//                "This movie is very good",
+//                "This book is not good",
+//                "This food is very good",
+//                "This game is not good",
+//                "This song is very good",
+//                "This show is very good",
+//                "This app is very good"
+//        );
 
         // Create batch job parameters
         MlBatchJobParameters jobParams = MlBatchJobParameters.builder()
