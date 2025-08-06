@@ -1,0 +1,7 @@
+work*
+example-node.log*
+.gradle
+gradle.xml
+misc.xml
+ccs.xml
+.idea
