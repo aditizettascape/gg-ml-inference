@@ -283,6 +283,66 @@ public class InferenceExample {
     }
 
     /**
+     * Step 5: Batch API-Based Prediction
+     */
+    private void batchApiPrediction() {
+        System.out.println("\n=== Step 5: Batch API-Based Prediction ===");
+
+        List<String> batchInputs = Arrays.asList(
+                "This movie is very good",
+                "This book is not good",
+                "This food is very good",
+                "This game is not good",
+                "This song is very good",
+                "This show is very good",
+                "This app is very good"
+        );
+
+        System.out.println("Batch inputs (" + batchInputs.size() + " items):");
+        for (int i = 0; i < batchInputs.size(); i++) {
+            System.out.println("   " + (i + 1) + ": " + batchInputs.get(i));
+        }
+
+        try {
+            // Create job parameters for batch prediction
+            MlBatchJobParameters jobParams = MlBatchJobParameters.builder()
+                    .id(MODEL_ID)
+                    .version(MODEL_VERSION)
+                    .type(ModelType.PYTORCH)
+                    .url(LOCAL_MODEL_PATH)
+                    .config(ModelConfig.builder().batchSize(16).build())
+                    .property("input_class", "java.lang.String")
+                    .property("output_class", "ai.djl.modality.Classifications")
+                    .property("application", "ai.djl.Application$NLP$SENTIMENT_ANALYSIS")
+                    .property("translatorFactory", "ai.djl.pytorch.zoo.nlp.sentimentanalysis.PtDistilBertTranslatorFactory")
+                    .batchInput(batchInputs)
+                    .build();
+
+            long startTime = System.currentTimeMillis();
+
+            // Direct API batch prediction
+            List<Object> results = mlApi.batchPredict(jobParams);
+
+            long duration = System.currentTimeMillis() - startTime;
+
+            System.out.println("Batch API-based prediction results:");
+            for (int i = 0; i < results.size(); i++) {
+                System.out.println("   Input: " + batchInputs.get(i));
+                System.out.println("   Result: " + results.get(i));
+                System.out.println();
+            }
+
+            System.out.println("   Total processing time: " + duration + "ms");
+            System.out.println("   Average per item: " + (duration / batchInputs.size()) + "ms");
+            System.out.println("   Executed locally via MLInferenceService with batch optimization");
+
+        } catch (Throwable e) {
+            System.err.println("Error in batch API prediction");
+            throw e;
+        }
+    }
+
+    /**
      * Helper method to set up sample data for SQL examples
      */
     private void setupSampleData() {
