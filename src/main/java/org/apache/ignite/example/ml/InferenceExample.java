@@ -286,17 +286,19 @@ public class InferenceExample {
      * Step 5: Batch API-Based Prediction
      */
     private void batchApiPrediction() {
-        System.out.println("\n=== Step 5: Batch API-Based Prediction ===");
+//        System.out.println("\n=== Step 5: Batch API-Based Prediction ===");
 
-        List<String> batchInputs = Arrays.asList(
-                "This movie is very good",
-                "This book is not good",
-                "This food is very good",
-                "This game is not good",
-                "This song is very good",
-                "This show is very good",
-                "This app is very good"
-        );
+        List<String> batchInputs = Arrays.list();
+//                Arrays.asList(
+//                "This movie is very good",
+//                "This book is not good",
+//                "This food is very good",
+//                "This game is not good",
+//                "This song is very good",
+//                "This show is very good",
+//                "This app is very good"
+//        );
+
 
         System.out.println("Batch inputs (" + batchInputs.size() + " items):");
         for (int i = 0; i < batchInputs.size(); i++) {
