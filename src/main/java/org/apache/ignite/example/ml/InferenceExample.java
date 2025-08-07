@@ -299,7 +299,6 @@ public class InferenceExample {
 //                "This app is very good"
 //        );
 
-
         System.out.println("Batch inputs (" + batchInputs.size() + " items):");
         for (int i = 0; i < batchInputs.size(); i++) {
             System.out.println("   " + (i + 1) + ": " + batchInputs.get(i));

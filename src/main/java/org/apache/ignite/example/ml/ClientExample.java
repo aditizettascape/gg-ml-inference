@@ -17,38 +17,27 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
-import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteServer;
 import org.apache.ignite.InitParameters;
 import org.apache.ignite.client.IgniteClient;
-import org.apache.ignite.compute.JobDescriptor;
-import org.apache.ignite.compute.JobExecution;
-import org.apache.ignite.compute.JobExecutionOptions;
-import org.apache.ignite.compute.JobExecutorType;
-import org.apache.ignite.compute.JobTarget;
-import org.apache.ignite.deployment.DeploymentUnit;
 import org.apache.ignite.sql.IgniteSql;
-import org.gridgain.ml.compute.MlBatchPredictionJob;
-import org.gridgain.ml.compute.MlSimplePredictionJob;
-import org.gridgain.ml.compute.MlSqlPredictionJob;
+import org.apache.ignite.table.Tuple;
+import org.gridgain.ml.IgniteMl;
 import org.gridgain.ml.model.MlBatchJobParameters;
+import org.gridgain.ml.model.MlColocatedJobParameters;
 import org.gridgain.ml.model.MlSimpleJobParameters;
 import org.gridgain.ml.model.MlSqlJobParameters;
 import org.gridgain.ml.model.ModelConfig;
 import org.gridgain.ml.model.ModelType;
-import org.gridgain.ml.model.marshalling.MlInputMarshaller;
-import org.gridgain.ml.model.marshalling.MlOutputListMarshaller;
-import org.gridgain.ml.model.marshalling.MlOutputMarshaller;
-
 
 /**
- * Complete ML_EMBEDDED compute execution example demonstrating:
- * <p>
- * 1. Simple Prediction using Compute
- * 2. Batch Prediction using Compute
- * 3. SQL Prediction using Compute
+ * Example demonstrating ClientMl usage.
+ *
+ * <p>This example shows how ClientMl internally leverages ClientCompute while
+ * providing users with a simple, clean ML API.
+ *
  */
-public class ComputeExample {
+public class ClientExample extends ComputeExample {
 
     private static final String MODEL_ID = "sentiment-model";
     private static final String MODEL_VERSION = "1.0.0";
@@ -57,25 +46,22 @@ public class ComputeExample {
     private static final String WORK_FOLDER_PATH = "work";
 
     private IgniteServer server;
-    private Ignite ignite;
     private IgniteClient client;
+    private IgniteMl ml;
     private IgniteSql sql;
 
     public static void main(String[] args) {
-        ComputeExample example = new ComputeExample();
+        ClientExample example = new ClientExample();
 
         try {
             example.setupEmbeddedServer();
             example.setupClient();
 
-            // Execute all ML_EMBEDDED examples
-            example.executeSimpleMLPrediction();
-            example.executeBatchMLPrediction();
-
+            example.executeSimplePrediction();
+            example.executeBatchPrediction();
             example.setupSampleData();
-            example.executeSqlMLPrediction();
-
-            System.out.println("All ML_EMBEDDED examples completed successfully!");
+            example.executeSqlPrediction();
+            example.executeColocatedMLPrediction();
 
         } catch (Throwable e) {
             System.err.println("Example failed: " + e.getMessage());
@@ -104,7 +90,6 @@ public class ComputeExample {
                 .build();
 
         server.initCluster(initParameters);
-        ignite = server.api();
 
         System.out.println("Embedded server initialized");
     }
@@ -125,7 +110,8 @@ public class ComputeExample {
                 .addresses("127.0.0.1:10800")
                 .build();
 
-        sql = ignite.sql();
+        ml = client.ml();
+        sql = client.sql();
 
         System.out.println("Client connection established");
     }
@@ -160,10 +146,10 @@ public class ComputeExample {
     /**
      * Example 1: Simple ML prediction.
      */
-    private void executeSimpleMLPrediction() throws Exception {
-        System.out.println("=== Simple ML Prediction ===");
+    private void executeSimplePrediction() {
+        System.out.println("\n=== Simple Prediction - Clean ML API ===");
 
-        // Create job parameters
+        // Create job parameters - same as embedded mode!
         MlSimpleJobParameters jobParams = MlSimpleJobParameters.builder()
                 .id(MODEL_ID)
                 .version(MODEL_VERSION)
@@ -176,28 +162,12 @@ public class ComputeExample {
                 .input("This movie is absolutely fantastic! I loved every minute of it.")
                 .build();
 
-        JobDescriptor<MlSimpleJobParameters, Classifications> descriptor = JobDescriptor.builder(
-                        MlSimplePredictionJob.<MlSimpleJobParameters, Classifications>jobClass())
-                .units(List.of(new DeploymentUnit(MODEL_ID, MODEL_VERSION)))
-                .options(JobExecutionOptions.builder()
-                        .executorType(JobExecutorType.ML_EMBEDDED)
-                        .priority(1)
-                        .build())
-                .argumentMarshaller(new MlInputMarshaller<>())
-                .resultMarshaller(new MlOutputMarshaller<>())
-                .build();
+        System.out.println(" Input: \"" + jobParams.input() + "\"");
+        System.out.println(" Executing via clean ML API...");
 
-        System.out.println("Input: \"" + jobParams.input() + "\"");
         long startTime = System.currentTimeMillis();
 
-        // Execute ML prediction
-        JobExecution<Classifications> execution = client.compute().submitAsync(
-                JobTarget.anyNode(client.clusterNodes()),
-                descriptor,
-                jobParams
-        ).get();
-
-        Classifications result = execution.resultAsync().get();
+        Classifications result = ml.predict(jobParams);
         long duration = System.currentTimeMillis() - startTime;
         Classification best = result.best();
         System.out.printf("   %s (%.2f%%)\n",
@@ -211,19 +181,15 @@ public class ComputeExample {
     /**
      * Example 2: Batch ML prediction.
      */
-    private void executeBatchMLPrediction() throws Exception {
+    private void executeBatchPrediction() {
         System.out.println("\n=== Batch ML Prediction ===");
 
-        List<String> batchInputs = Arrays.aslist();
-//                Arrays.asList(
-//                "This movie is very good",
-//                "This book is not good",
-//                "This food is very good",
-//                "This game is not good",
-//                "This song is very good",
-//                "This show is very good",
-//                "This app is very good"
-//        );
+        List<String> batchInputs = Arrays.asList(
+                "This movie is very good",
+                "This book is not good",
+                "This food is very good",
+                "This game is not good"
+        );
 
         // Create batch job parameters
         MlBatchJobParameters jobParams = MlBatchJobParameters.builder()
@@ -238,31 +204,12 @@ public class ComputeExample {
                 .batchInput(batchInputs)
                 .build();
 
-        JobDescriptor<MlBatchJobParameters, List<Classifications>> descriptor = JobDescriptor.builder(
-                        MlBatchPredictionJob.<MlBatchJobParameters, Classifications>jobClass())
-                .units(List.of(new DeploymentUnit(MODEL_ID, MODEL_VERSION)))
-                .options(JobExecutionOptions.builder()
-                        .executorType(JobExecutorType.ML_EMBEDDED)
-                        .priority(2)
-                        .build())
-                .argumentMarshaller(new MlInputMarshaller<>())
-                .resultMarshaller(new MlOutputListMarshaller<>())
-                .build();
-
-        System.out.println("  Batch inputs (" + batchInputs.size() + " items):");
-        batchInputs.forEach(input -> System.out.println("   • \"" + input + "\""));
-        System.out.println("  Executing batch ML prediction...");
+        System.out.println("📝 Batch inputs (" + batchInputs.size() + " items)");
+        System.out.println("🔄 Executing batch prediction...");
 
         long startTime = System.currentTimeMillis();
 
-        // Execute batch ML prediction
-        JobExecution<List<Classifications>> execution = client.compute().submitAsync(
-                JobTarget.anyNode(client.clusterNodes()),
-                descriptor,
-                jobParams
-        ).get();
-
-        List<Classifications> results = execution.resultAsync().get();
+        List<Classifications> results = ml.batchPredict(jobParams);
         long duration = System.currentTimeMillis() - startTime;
 
         System.out.println("  Batch Results (" + results.size() + " ): items");
@@ -284,10 +231,12 @@ public class ComputeExample {
     /**
      * Example 3: SQL ML prediction.
      */
-    private void executeSqlMLPrediction() throws Exception {
+    private void executeSqlPrediction() {
         System.out.println("\n=== SQL ML Prediction ===");
 
-        String sqlQuery = "SELECT review_text FROM product_reviews WHERE sentiment IS NULL LIMIT 3";
+        String sqlQuery = "SELECT 'This is a great product!' as review_text " +
+                "UNION ALL SELECT 'Poor quality, very disappointed' as review_text " +
+                "UNION ALL SELECT 'Amazing value for money' as review_text";
 
         // Create SQL job parameters
         MlSqlJobParameters jobParams = MlSqlJobParameters.builder()
@@ -300,36 +249,18 @@ public class ComputeExample {
                 .property("application", "ai.djl.Application$NLP$SENTIMENT_ANALYSIS")
                 .property("translatorFactory", "ai.djl.pytorch.zoo.nlp.sentimentanalysis.PtDistilBertTranslatorFactory")
                 .sqlQuery(sqlQuery)
-                .sqlParams(null)
-                .build();
-
-        JobDescriptor<MlSqlJobParameters, List<Classifications>> descriptor = JobDescriptor.builder(
-                        MlSqlPredictionJob.<MlSqlJobParameters, Classifications>jobClass())
-                .units(List.of(new DeploymentUnit(MODEL_ID, MODEL_VERSION)))
-                .options(JobExecutionOptions.builder()
-                        .executorType(JobExecutorType.ML_EMBEDDED)
-                        .priority(3)
-                        .build())
-                .argumentMarshaller(new MlInputMarshaller<>())
-                .resultMarshaller(new MlOutputListMarshaller<>())
                 .build();
 
         System.out.println(" SQL Query: " + sqlQuery);
-        System.out.println(" Executing SQL-based ML prediction...");
+        System.out.println(" Executing SQL prediction...");
 
         long startTime = System.currentTimeMillis();
 
-        // Execute SQL ML prediction
-        JobExecution<List<Classifications>> execution = client.compute().submitAsync(
-                JobTarget.anyNode(client.clusterNodes()),
-                descriptor,
-                jobParams
-        ).get();
+        List<Classifications> results = ml.predictFromSql(jobParams);
 
-        List<Classifications> results = execution.resultAsync().get();
         long duration = System.currentTimeMillis() - startTime;
 
-        System.out.println("  SQL ML Results (" + results.size() + " items):");
+        System.out.println(" SQL ML Results (" + results.size() + " items):");
         for (int i = 0; i < results.size(); i++) {
             Classifications classification = results.get(i);
             Classification best = classification.best();
@@ -345,29 +276,58 @@ public class ComputeExample {
     }
 
     /**
-     * Cleanup resources.
-     * This code is unchanged from the original implementation.
+     * Example 4: Colocated ML prediction.
      */
+    private void executeColocatedMLPrediction() throws Exception {
+        System.out.println("=== Colocated ML Prediction ===");
+
+        // Create Colocated job parameters
+        MlColocatedJobParameters jobParams = MlColocatedJobParameters.builder()
+                .id(MODEL_ID)
+                .version(MODEL_VERSION)
+                .type(ModelType.PYTORCH)
+                .url("") // Resolved from deployment unit
+                .config(ModelConfig.builder().build())
+                .property("input_class", String.class.getName())
+                .property("output_class", Classifications.class.getName())
+                .property("application", "ai.djl.Application$NLP$SENTIMENT_ANALYSIS")
+                .property("translatorFactory", "ai.djl.pytorch.zoo.nlp.sentimentanalysis.PtDistilBertTranslatorFactory")
+                .tableName("product_reviews")
+                .key(Tuple.create().set("review_id", 1))
+                .inputColumn("review_text")
+                .build();
+
+        long startTime = System.currentTimeMillis();
+
+        Classifications result = ml.predictColocated(jobParams);
+        long duration = System.currentTimeMillis() - startTime;
+        Classification best = result.best();
+        System.out.printf("   %s (%.2f%%)\n",
+                best.getClassName(),
+                best.getProbability() * 100);
+
+        System.out.println("Duration: " + duration + "ms");
+        System.out.println("Simple ML prediction complete!");
+    }
+
     private void cleanup() {
-        try {
-            System.out.println("Cleanup started");
-            if (sql != null) {
-                sql.execute(null, "DROP TABLE IF EXISTS product_reviews");
-                System.out.println("  Sample data cleaned up");
-            }
+        System.out.println("\nCleaning up...");
 
-            if (client != null) {
-                client.close();
-                System.out.println("  Client connection closed");
-            }
-
-            if (server != null) {
-                server.shutdown();
-                System.out.println("  Embedded server shutdown complete");
-            }
-            System.out.println("Cleanup completed!");
-        } catch (Exception e) {
-            System.err.println("Cleanup error: " + e.getMessage());
+        if (sql != null) {
+            sql.execute(null, "DROP TABLE IF EXISTS product_reviews");
+            System.out.println("  Sample data cleaned up");
         }
+
+        if (client != null) {
+            client.close();
+            System.out.println("  Client connection closed");
+        }
+
+        if (server != null) {
+            server.shutdown();
+            System.out.println("  Embedded server shutdown complete");
+        }
+
+        System.out.println("Cleanup complete");
     }
 }
